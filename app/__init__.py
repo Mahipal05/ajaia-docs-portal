@@ -19,8 +19,12 @@ from flask import (
     url_for,
 )
 
-from . import database
-from .importers import SUPPORTED_EXTENSIONS, UnsupportedImportError, html_preview, import_file
+try:
+    from . import database
+    from .importers import SUPPORTED_EXTENSIONS, UnsupportedImportError, html_preview, import_file
+except ImportError:  # Support `python app/__init__.py` from the repo root.
+    import database
+    from importers import SUPPORTED_EXTENSIONS, UnsupportedImportError, html_preview, import_file
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -87,8 +91,14 @@ def create_app(test_config: dict | None = None) -> Flask:
             else:
                 session.clear()
                 session["user_id"] = int(user["id"])
-                return redirect(url_for("dashboard"))
+                destination = request.args.get("next") or url_for("dashboard")
+                return redirect(destination)
         return render_template("login.html", users=users)
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
 
     @app.get("/")
     @login_required
@@ -96,20 +106,63 @@ def create_app(test_config: dict | None = None) -> Flask:
         owned_docs, shared_docs = database.get_dashboard_documents(
             app.config["DATABASE"], current_user_id()
         )
+        owned_cards = [
+            {
+                **dict(row),
+                "preview": html_preview(row["content_html"]),
+            }
+            for row in owned_docs
+        ]
+        shared_cards = [
+            {
+                **dict(row),
+                "preview": html_preview(row["content_html"]),
+            }
+            for row in shared_docs
+        ]
         return render_template(
             "dashboard.html",
-            owned_documents=owned_docs,
-            shared_documents=shared_docs,
+            owned_documents=owned_cards,
+            shared_documents=shared_cards,
             demo_users=database.fetch_users(app.config["DATABASE"]),
         )
 
     @app.post("/documents")
     @login_required
     def create_document():
-        title = (request.form.get("title") or "Untitled document")[:120]
+        title = (request.form.get("title") or "").strip() or "Untitled document"
+        title = title[:120]
         doc_id = database.create_document(
             app.config["DATABASE"], current_user_id(), title=title
         )
+        flash("Document created. Start typing when you're ready.", "success")
+        return redirect(url_for("document_editor", document_id=doc_id))
+
+    @app.post("/documents/import")
+    @login_required
+    def import_document():
+        uploaded_file = request.files.get("import_file")
+        custom_title = (request.form.get("title") or "").strip()
+
+        if uploaded_file is None or not uploaded_file.filename:
+            flash("Choose a file to import.", "error")
+            return redirect(url_for("dashboard"))
+
+        try:
+            imported = import_file(uploaded_file.filename, uploaded_file.read())
+        except UnsupportedImportError as exc:
+            flash(str(exc), "error")
+            return redirect(url_for("dashboard"))
+
+        title = (custom_title or imported.suggested_title)[:120]
+        doc_id = database.create_document(
+            app.config["DATABASE"],
+            current_user_id(),
+            title=title,
+            content_html=imported.content_html,
+            source_filename=uploaded_file.filename,
+        )
+        flash(f"Imported {uploaded_file.filename} into a new document.", "success")
         return redirect(url_for("document_editor", document_id=doc_id))
 
     @app.get("/documents/<int:document_id>")
@@ -120,27 +173,118 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         if not doc:
             abort(404)
-        return render_template("editor.html", document=doc)
+
+        is_owner = int(doc["owner_id"]) == current_user_id()
+        shared_users = database.get_shared_users(app.config["DATABASE"], document_id)
+        share_candidates = (
+            database.get_share_candidates(app.config["DATABASE"], document_id, current_user_id())
+            if is_owner
+            else []
+        )
+
+        return render_template(
+            "editor.html",
+            document=doc,
+            is_owner=is_owner,
+            shared_users=shared_users,
+            share_candidates=share_candidates,
+        )
+
+    @app.post("/documents/<int:document_id>/share")
+    @login_required
+    def share_document(document_id):
+        doc = database.get_document(
+            app.config["DATABASE"], document_id, viewer_id=current_user_id()
+        )
+        if not doc:
+            abort(404)
+        if int(doc["owner_id"]) != current_user_id():
+            abort(403)
+
+        target_user_id = request.form.get("target_user_id", type=int)
+        if not target_user_id:
+            flash("Pick a teammate to share with.", "error")
+            return redirect(url_for("document_editor", document_id=document_id))
+
+        if database.add_share(
+            app.config["DATABASE"], document_id, current_user_id(), target_user_id
+        ):
+            flash("Access granted.", "success")
+        else:
+            flash("Unable to share this document with that user.", "error")
+        return redirect(url_for("document_editor", document_id=document_id))
 
     @app.post("/api/documents/<int:document_id>/save")
     @login_required
     def save_document(document_id):
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
+        title = (data.get("title") or "").strip()
+        content_html = (data.get("content_html") or "").strip()
+
+        if not title:
+            return jsonify({"error": "Title is required."}), 400
+        if len(title) > 120:
+            return jsonify({"error": "Title must be 120 characters or fewer."}), 400
+        if len(content_html) > 200_000:
+            return jsonify({"error": "Document content is too large."}), 400
+
         updated = database.update_document(
             app.config["DATABASE"],
-            document_id,
-            current_user_id(),
-            data["title"],
-            data["content_html"],
+            document_id=document_id,
+            user_id=current_user_id(),
+            title=title,
+            content_html=content_html,
         )
         if not updated:
-            return {"error": "Not found"}, 404
-        return {"status": "saved"}
+            return jsonify({"error": "Document not found or access denied."}), 404
+        return (
+            jsonify(
+                {
+                    "id": int(updated["id"]),
+                    "title": updated["title"],
+                    "updated_at": updated["updated_at"],
+                }
+            ),
+            200,
+        )
+
+    @app.errorhandler(403)
+    def forbidden(_error):
+        return (
+            render_template(
+                "error.html",
+                title="Access denied",
+                message="You do not have permission to view that document.",
+            ),
+            403,
+        )
+
+    @app.errorhandler(404)
+    def not_found(_error):
+        return (
+            render_template(
+                "error.html",
+                title="Not found",
+                message="The page you requested does not exist or is not shared with you.",
+            ),
+            404,
+        )
+
+    @app.errorhandler(413)
+    def too_large(_error):
+        flash("File too large. Please keep uploads under 2 MB.", "error")
+        return redirect(url_for("dashboard"))
 
     return app
 
 
 # ✅ THIS PART FIXES RENDER DEPLOYMENT
-if __name__ == "__main__":
+def run_dev_server() -> None:
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG") == "1"
     app = create_app()
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=port, debug=debug)
+
+
+if __name__ == "__main__":
+    run_dev_server()
