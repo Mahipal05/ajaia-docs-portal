@@ -1,0 +1,130 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ document.title }} | DocSprint{% endblock %}
+
+{% block content %}
+  <section class="editor-shell" data-document-id="{{ document.id }}">
+    <div class="editor-main">
+      <div class="editor-heading">
+        <div>
+          <a href="{{ url_for('dashboard') }}" class="secondary-link">Back to dashboard</a>
+          <div class="document-topline">
+            <span class="status-pill {{ 'status-owned' if is_owner else 'status-shared' }}">
+              {{ "Owned" if is_owner else "Shared" }}
+            </span>
+            <small>Last saved {{ document.updated_at|datetime_label }}</small>
+          </div>
+        </div>
+        <button id="save-button" type="button" class="primary-button">Save changes</button>
+      </div>
+
+      <label for="document-title" class="eyebrow">Document title</label>
+      <input
+        id="document-title"
+        class="title-input"
+        type="text"
+        maxlength="120"
+        value="{{ document.title }}"
+      >
+
+      <div class="toolbar card">
+        <button type="button" data-command="bold"><strong>B</strong></button>
+        <button type="button" data-command="italic"><em>I</em></button>
+        <button type="button" data-command="underline"><u>U</u></button>
+        <span class="toolbar-divider"></span>
+        <select id="block-style">
+          <option value="P">Paragraph</option>
+          <option value="H1">Heading 1</option>
+          <option value="H2">Heading 2</option>
+          <option value="H3">Heading 3</option>
+        </select>
+        <button type="button" data-command="insertUnorderedList">Bullet list</button>
+        <button type="button" data-command="insertOrderedList">Numbered list</button>
+      </div>
+
+      <div class="editor-card card">
+        <div
+          id="rich-editor"
+          class="rich-editor"
+          contenteditable="true"
+          spellcheck="true"
+          data-placeholder="Start writing your document here..."
+        >{{ document.content_html|safe }}</div>
+      </div>
+
+      <div class="editor-status-row">
+        <p id="save-status" class="subtle">Ready to edit.</p>
+        <p id="word-count" class="subtle">0 words</p>
+      </div>
+    </div>
+
+    <aside class="editor-sidebar">
+      <section class="card info-card">
+        <span class="eyebrow">Details</span>
+        <h2>Document context</h2>
+        <dl class="meta-list">
+          <div>
+            <dt>Owner</dt>
+            <dd>{{ document.owner_name }}</dd>
+          </div>
+          <div>
+            <dt>Created</dt>
+            <dd>{{ document.created_at|datetime_label }}</dd>
+          </div>
+          <div>
+            <dt>Updated</dt>
+            <dd>{{ document.updated_at|datetime_label }}</dd>
+          </div>
+          {% if document.source_filename %}
+            <div>
+              <dt>Imported from</dt>
+              <dd>{{ document.source_filename }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+      </section>
+
+      <section class="card info-card">
+        <span class="eyebrow">Sharing</span>
+        <h2>{{ "Manage access" if is_owner else "Shared access" }}</h2>
+        {% if is_owner %}
+          <form method="post" action="{{ url_for('share_document', document_id=document.id) }}" class="stack-form">
+            <label for="target-user-id">Grant access to</label>
+            <select id="target-user-id" name="target_user_id" {% if not share_candidates %}disabled{% endif %}>
+              {% if share_candidates %}
+                {% for user in share_candidates %}
+                  <option value="{{ user.id }}">{{ user.name }} ({{ user.email }})</option>
+                {% endfor %}
+              {% else %}
+                <option>All demo users already have access</option>
+              {% endif %}
+            </select>
+            <button type="submit" class="primary-button" {% if not share_candidates %}disabled{% endif %}>
+              Share document
+            </button>
+          </form>
+        {% else %}
+          <p class="subtle">
+            This document was shared with you by {{ document.owner_name }}. Shared users can edit
+            content, but only the owner can grant access to others.
+          </p>
+        {% endif %}
+
+        <div class="share-list">
+          {% if shared_users %}
+            {% for user in shared_users %}
+              <div class="share-chip">
+                <strong>{{ user.name }}</strong>
+                <small>{{ user.email }}</small>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="subtle">This document has not been shared yet.</p>
+          {% endif %}
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <script src="{{ url_for('static', filename='editor.js') }}" defer></script>
+{% endblock %}

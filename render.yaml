@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: docsprint
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DOCSPRINT_DATABASE
+        value: /opt/render/project/src/render-data/portal.db
+
+# Notes:
+# - If you deploy this folder as its own repo, this file works as-is.
+# - If you deploy from a larger monorepo, set Render's Root Directory to `ajaia-docs-portal`.
+# - Render's filesystem is ephemeral by default. For persistence across deploys/restarts on a paid web service,
+#   attach a persistent disk and mount it at `/opt/render/project/src/render-data`.

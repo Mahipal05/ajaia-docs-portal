@@ -1,0 +1,122 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard | DocSprint{% endblock %}
+
+{% block content %}
+  <section class="hero hero-dashboard">
+    <div class="hero-copy">
+      <span class="eyebrow">Workspace</span>
+      <h1>Your documents, imports, and shares in one place.</h1>
+      <p>
+        Create a blank document, import a supported file, then switch users to verify the
+        sharing flow end to end.
+      </p>
+    </div>
+
+    <div class="demo-note card">
+      <h2>How to demo sharing</h2>
+      <ol class="plain-list">
+        <li>Create or import a document as the current user.</li>
+        <li>Open the document and grant access to another seeded user.</li>
+        <li>Switch users from the top-right corner and open the shared document.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="dashboard-grid">
+    <div class="card action-card">
+      <div class="section-heading">
+        <span class="eyebrow">New work</span>
+        <h2>Create a document</h2>
+      </div>
+      <form method="post" action="{{ url_for('create_document') }}" class="stack-form">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" maxlength="120" placeholder="Quarterly launch brief">
+        <button type="submit" class="primary-button">Create blank document</button>
+      </form>
+    </div>
+
+    <div class="card action-card">
+      <div class="section-heading">
+        <span class="eyebrow">File import</span>
+        <h2>Turn a file into an editable draft</h2>
+      </div>
+      <form method="post" action="{{ url_for('import_document') }}" enctype="multipart/form-data" class="stack-form">
+        <label for="import-title">Optional title override</label>
+        <input id="import-title" name="title" type="text" maxlength="120" placeholder="Leave blank to use the filename">
+
+        <label for="import-file">File</label>
+        <input id="import-file" name="import_file" type="file" accept=".txt,.md,.html" required>
+        <p class="subtle">Supported formats: {{ supported_extensions }}. Max upload size: 2 MB.</p>
+
+        <button type="submit" class="primary-button">Import as new document</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="list-section">
+    <div class="section-heading">
+      <span class="eyebrow">Owned by you</span>
+      <h2>Documents you can manage and share</h2>
+    </div>
+
+    {% if owned_documents %}
+      <div class="document-grid">
+        {% for document in owned_documents %}
+          <a href="{{ url_for('document_editor', document_id=document.id) }}" class="document-card card">
+            <div class="card-topline">
+              <span class="status-pill status-owned">Owned</span>
+              <small>{{ document.updated_at|datetime_label }}</small>
+            </div>
+            <h3>{{ document.title }}</h3>
+            <p>{{ document.preview or "This document is ready for its first draft." }}</p>
+            <div class="card-footer">
+              <small>{{ document.share_count }} teammate{{ "" if document.share_count == 1 else "s" }} shared</small>
+              {% if document.source_filename %}
+                <small>Imported from {{ document.source_filename }}</small>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state card">
+        <h3>No owned documents yet</h3>
+        <p>Create a blank doc or import a file to get started.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="list-section">
+    <div class="section-heading">
+      <span class="eyebrow">Shared with you</span>
+      <h2>Documents another user has granted access to</h2>
+    </div>
+
+    {% if shared_documents %}
+      <div class="document-grid">
+        {% for document in shared_documents %}
+          <a href="{{ url_for('document_editor', document_id=document.id) }}" class="document-card card">
+            <div class="card-topline">
+              <span class="status-pill status-shared">Shared</span>
+              <small>{{ document.updated_at|datetime_label }}</small>
+            </div>
+            <h3>{{ document.title }}</h3>
+            <p>{{ document.preview or "Shared document with no content yet." }}</p>
+            <div class="card-footer">
+              <small>Owner: {{ document.owner_name }}</small>
+              {% if document.source_filename %}
+                <small>Imported from {{ document.source_filename }}</small>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state card">
+        <h3>Nothing shared yet</h3>
+        <p>Share a document from another account to see it show up here.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,10 @@
+Walkthrough video URL:
+TODO: Replace with your unlisted Loom or YouTube link before submission.
+
+Suggested recording order:
+1. Login and dashboard
+2. Create and edit a document
+3. Import a markdown file
+4. Share with another seeded user
+5. Switch users and open the shared document
+6. Close with tradeoffs and AI workflow

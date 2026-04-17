@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}DocSprint{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="glow glow-left"></div>
+      <div class="glow glow-right"></div>
+
+      <header class="site-header">
+        <a class="brand" href="{{ url_for('dashboard') if current_user else url_for('login') }}">
+          <span class="brand-mark">DS</span>
+          <span>
+            <strong>DocSprint</strong>
+            <small>Ajaia take-home build</small>
+          </span>
+        </a>
+
+        {% if current_user %}
+          <div class="header-actions">
+            <div class="current-user-chip">
+              <span class="eyebrow">Active user</span>
+              <strong>{{ current_user.name }}</strong>
+              <small>{{ current_user.email }}</small>
+            </div>
+            <a class="secondary-link" href="{{ url_for('login') }}">Switch user</a>
+            <form method="post" action="{{ url_for('logout') }}">
+              <button class="ghost-button" type="submit">Log out</button>
+            </form>
+          </div>
+        {% endif %}
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="flash-stack">
+            {% for category, message in messages %}
+              <article class="flash flash-{{ category }}">{{ message }}</article>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>

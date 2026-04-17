@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+
+{% block title %}Choose a Demo User | DocSprint{% endblock %}
+
+{% block content %}
+  <section class="hero hero-login">
+    <div class="hero-copy">
+      <span class="eyebrow">Collaborative document editor</span>
+      <h1>Pick a seeded user and jump straight into the workflow.</h1>
+      <p>
+        This demo keeps auth intentionally lightweight so reviewers can focus on document
+        creation, rich-text editing, imports, and sharing behavior.
+      </p>
+      <div class="feature-pills">
+        <span>Rich text editor</span>
+        <span>SQLite persistence</span>
+        <span>Owned and shared views</span>
+      </div>
+    </div>
+
+    <div class="login-panel card">
+      <h2>Demo accounts</h2>
+      <p class="subtle">
+        Click any account to enter the app. No password is required for this take-home build.
+      </p>
+
+      <div class="user-grid">
+        {% for user in users %}
+          <form method="post" action="{{ url_for('login', next=request.args.get('next')) }}" class="user-card">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <button type="submit">
+              <span class="user-avatar">{{ user.name[:1] }}</span>
+              <span class="user-copy">
+                <strong>{{ user.name }}</strong>
+                <small>{{ user.email }}</small>
+              </span>
+            </button>
+          </form>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endblock %}
